@@ -94,7 +94,7 @@ if platform.system() != 'Darwin':
 class TranscriptionWorker:
     def __init__(self, conn, stdout_pipe, model_path, download_root, compute_type, gpu_device_index, device,
                  ready_event, shutdown_event, interrupt_stop_event, beam_size, initial_prompt, suppress_tokens,
-                 batch_size, faster_whisper_vad_filter, normalize_audio):
+                 batch_size, faster_whisper_vad_filter, normalize_audio, vad_parameters):
         self.conn = conn
         self.stdout_pipe = stdout_pipe
         self.model_path = model_path
@@ -111,6 +111,12 @@ class TranscriptionWorker:
         self.batch_size = batch_size
         self.faster_whisper_vad_filter = faster_whisper_vad_filter
         self.normalize_audio = normalize_audio
+        self.vad_parameters = vad_parameters or {
+            'min_silence_duration_ms': 300,
+            'min_speech_duration_ms': 100,
+            'speech_pad_ms': 100,
+            'threshold': 0.3
+        }
         self.queue = queue.Queue()
 
     def custom_print(self, *args, **kwargs):
@@ -203,7 +209,8 @@ class TranscriptionWorker:
                                 initial_prompt=prompt,
                                 suppress_tokens=self.suppress_tokens,
                                 batch_size=self.batch_size, 
-                                vad_filter=self.faster_whisper_vad_filter
+                                vad_filter=self.faster_whisper_vad_filter,
+                                vad_parameters=self.vad_parameters
                             )
                         else:
                             segments, info = model.transcribe(
@@ -212,7 +219,8 @@ class TranscriptionWorker:
                                 beam_size=self.beam_size,
                                 initial_prompt=prompt,
                                 suppress_tokens=self.suppress_tokens,
-                                vad_filter=self.faster_whisper_vad_filter
+                                vad_filter=self.faster_whisper_vad_filter,
+                                vad_parameters=self.vad_parameters
                             )
                         elapsed = time.time() - start_t
                         transcription = " ".join(seg.text for seg in segments).strip()
@@ -279,7 +287,7 @@ class AudioToTextRecorder:
                  realtime_batch_size: int = 16,
 
                  # Voice activation parameters
-                 silero_sensitivity: float = INIT_SILERO_SENSITIVITY,
+                 silero_sensitivity: float = 0.7,
                  silero_use_onnx: bool = False,
                  silero_deactivity_detection: bool = False,
                  webrtc_sensitivity: int = INIT_WEBRTC_SENSITIVITY,
@@ -335,6 +343,7 @@ class AudioToTextRecorder:
                  faster_whisper_vad_filter: bool = True,
                  normalize_audio: bool = False,
                  start_callback_in_new_thread: bool = False,
+                 vad_parameters: dict = None,
                  ):
         """
         Initializes an audio recorder and  transcription
@@ -418,9 +427,7 @@ class AudioToTextRecorder:
             slight delay compared to the regular real-time updates.
         - realtime_batch_size (int, default=16): Batch size for the real-time
             transcription model.
-        - silero_sensitivity (float, default=SILERO_SENSITIVITY): Sensitivity
-            for the Silero Voice Activity Detection model ranging from 0
-            (least sensitive) to 1 (most sensitive). Default is 0.5.
+        - silero_sensitivity (float, default=0.7): Sensitivity for the Silero Voice Activity Detection model ranging from 0 (least sensitive) to 1 (most sensitive). Higher values make it easier to trigger speech detection.
         - silero_use_onnx (bool, default=False): Enables usage of the
             pre-trained model from Silero in the ONNX (Open Neural Network
             Exchange) format instead of the PyTorch format. This is
@@ -571,6 +578,7 @@ class AudioToTextRecorder:
             the callback functions will be executed in a
             new thread. This can help improve performance by allowing the
             callback to run concurrently with other operations.
+        - vad_parameters (dict, default=None): Dictionary of VAD parameters to pass to faster_whisper's VAD filter. Useful for tuning speed and aggressiveness. Example: {'min_silence_duration_ms': 300, 'min_speech_duration_ms': 100, 'speech_pad_ms': 100, 'threshold': 0.3}
 
         Raises:
             Exception: Errors related to initializing transcription
@@ -685,6 +693,12 @@ class AudioToTextRecorder:
         self.use_extended_logging = use_extended_logging
         self.faster_whisper_vad_filter = faster_whisper_vad_filter
         self.normalize_audio = normalize_audio
+        self.vad_parameters = vad_parameters or {
+            'min_silence_duration_ms': 300,
+            'min_speech_duration_ms': 100,
+            'speech_pad_ms': 100,
+            'threshold': 0.3
+        }
         self.awaiting_speech_end = False
         self.start_callback_in_new_thread = start_callback_in_new_thread
 
@@ -758,6 +772,7 @@ class AudioToTextRecorder:
                 self.batch_size,
                 self.faster_whisper_vad_filter,
                 self.normalize_audio,
+                self.vad_parameters,
             )
         )
 
