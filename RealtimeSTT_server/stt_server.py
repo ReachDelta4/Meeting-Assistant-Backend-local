@@ -533,8 +533,8 @@ def parse_arguments():
     parser.add_argument('--allowed_latency_limit', type=int, default=100,
                         help='Maximal amount of chunks that can be unprocessed in queue before discarding chunks.. Default is 100.')
 
-    parser.add_argument('--faster_whisper_vad_filter', action='store_true',
-                        help='Enable VAD filter for Faster Whisper. Default is False.')
+    parser.add_argument('--faster_whisper_vad_filter', action='store_true', default=True,
+                        help='Enable VAD filter for Faster Whisper. Default is True.')
 
     parser.add_argument('--logchunks', action='store_true', help='Enable logging of incoming audio chunks (periods)')
 
